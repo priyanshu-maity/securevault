@@ -1,11 +1,14 @@
 import os
+import base64
 from pathlib import Path
 from typing import Optional, Self
 import pickle
 from encoding.utils import TextEncoder
 
 
-VAULTS_PATH: Path = Path(os.environ['USERPROFILE']) / '.vaults' if os.name == 'nt' else Path('~').expanduser() / '.vaults'
+SEP: str = "\n%%----------------%%\n"
+EXTENSION: str = "svault"
+VAULTS_PATH: Path = Path(os.environ['USERPROFILE']) / ".vaults" if os.name == 'nt' else Path('~').expanduser() / ".vaults"
 
 if not os.path.exists(VAULTS_PATH):
     VAULTS_PATH.mkdir()
@@ -21,26 +24,27 @@ class Vault:
         if vault_name.lower() in self.vaults:
             raise ValueError(f"Vault '{vault_name}' already exists")
 
-        vault_path = VAULTS_PATH / vault_name.lower()
-        vault_path.mkdir()
+        vault_path = VAULTS_PATH / f"{vault_name.lower()}.{EXTENSION}"
+        vault_path.touch()
 
         if isinstance(encoder, str | Path):
             encoder_path = Path(encoder) if isinstance(encoder, str) else encoder
-            if encoder_path.is_file() and encoder_path.suffix == '.enc':
-                with open(encoder_path, 'rb') as enc_file:
-                    encoder = pickle.load(enc_file)
-                with open(vault_path / "encoder.enc", 'wb') as enc_file:
-                    pickle.dump(encoder, enc_file, protocol=4)
+            if encoder_path.is_file() and encoder_path.suffix.lower() == '.enc':
+                with open(encoder_path, 'r') as enc_file:
+                    encoder = enc_file.read()
+                with open(vault_path, 'w') as v_file:
+                    v_file.write(encoder + SEP)
             else:
                 raise FileNotFoundError(f"Encoder file not found at {encoder_path}")
         elif isinstance(encoder, TextEncoder):
-            with open(vault_path / "encoder.enc", 'wb') as enc_file:
-                pickle.dump(encoder, enc_file, protocol=4)
+            with open(vault_path, 'w') as v_file:
+                encoder = base64.b85encode(pickle.dumps(encoder)).decode('utf-8')
+                v_file.write(encoder + SEP)
         else:
-            raise ValueError("encoder must be a TextEncoder instance or path to a '.enc' file.")
+            raise ValueError("The encoder must be a 'TextEncoder' instance or path to a '.enc' file.")
 
-        (vault_path / "index.idx").touch()
-        (vault_path / "data.vault").touch()
+        with open(vault_path, 'w') as v_file:
+            v_file.write("{}")  # TODO: Add GDrive support
 
         self.vaults.append(vault_name.lower())
 
@@ -82,4 +86,3 @@ if __name__ == '__main__':
     # vault = Vault()
     # vault.create_vault("test_vault", encoder)
 
-    print(pickle.dumps(encoder))
